@@ -1,5 +1,6 @@
 import math
 import sys
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Tuple
 
@@ -684,6 +685,7 @@ class AppState:
                 ],
             ),
             ("Type of Schedule", ["Fixed Hours", "Flexible Hours"]),
+            ("Sort by Deadline", ["Earliest First", "Latest First"]),
         ]
         self.dropdowns: List[Dropdown] = []
         self._build_dropdowns()
@@ -696,6 +698,7 @@ class AppState:
             pygame.Rect(912, 330, 240, 44),
             pygame.Rect(324, 402, 564, 44),
             pygame.Rect(912, 402, 240, 44),
+            pygame.Rect(324, 474, 240, 44),
         ]
         for idx, ((label, options), rect) in enumerate(zip(self.filter_defs, positions)):
             default = "Any"
@@ -713,6 +716,13 @@ class AppState:
     def filtered_jobs(self) -> List[JobPosting]:
         query = self.search_input.value.strip().lower()
         results: List[JobPosting] = []
+        sort_value = "Any"
+
+        for dropdown in self.dropdowns:
+            if dropdown.label == "Sort by Deadline":
+                sort_value = dropdown.selected
+                break
+
         for job in self.jobs:
             if query and query not in job.filter_blob:
                 continue
@@ -726,11 +736,18 @@ class AppState:
             }
             include = True
             for dropdown in self.dropdowns:
+                if dropdown.label == "Sort by Deadline":
+                    continue
                 if dropdown.selected != "Any" and selected_map[dropdown.label] != dropdown.selected:
                     include = False
                     break
             if include:
                 results.append(job)
+
+        if sort_value != "Any":
+            reverse = sort_value == "Latest First"
+            results.sort(key=lambda job: datetime.strptime(job.deadline, "%m/%d/%Y"), reverse=reverse)
+
         return results
 
 
@@ -827,7 +844,7 @@ def draw_shell(surface: pygame.Surface, state: AppState) -> pygame.Rect:
 
 def get_search_list_view_height(filter_panel_open: bool) -> int:
     content = get_main_content_rect()
-    table_top = content.y + (404 if filter_panel_open else 170)
+    table_top = content.y + (428 if filter_panel_open else 170)
     header_bottom = table_top + 42
     return content.bottom - header_bottom - 28
 
@@ -897,7 +914,7 @@ def draw_search_page(
     filters_button.draw(surface)
 
     if state.filter_panel_open:
-        panel = pygame.Rect(content.x + 24, content.y + 156, content.width - 48, 224)
+        panel = pygame.Rect(content.x + 24, content.y + 156, content.width - 48, 248)
         pygame.draw.rect(surface, SOFT_PANEL, panel, border_radius=12)
         pygame.draw.rect(surface, BORDER, panel, 1, border_radius=12)
         filter_positions = [
@@ -906,15 +923,16 @@ def draw_search_page(
             pygame.Rect(panel.x + 612, panel.y + 38, 240, 44),
             pygame.Rect(panel.x + 24, panel.y + 110, 564, 44),
             pygame.Rect(panel.x + 612, panel.y + 110, 240, 44),
+            pygame.Rect(panel.x + 24, panel.y + 182, 240, 44),
         ]
         for dropdown, rect in zip(state.dropdowns, filter_positions):
             dropdown.rect = rect
         for dropdown in state.dropdowns:
             dropdown.draw(surface)
-        reset_button.rect = pygame.Rect(panel.right - 164, panel.y + 168, 140, 44)
+        reset_button.rect = pygame.Rect(panel.right - 164, panel.y + 182, 140, 44)
         reset_button.draw(surface)
 
-    table_top = content.y + (404 if state.filter_panel_open else 170)
+    table_top = content.y + (428 if state.filter_panel_open else 170)
     headers = ["Job Title", "Department", "Type", "Wage", "Deadline", "Action"]
     widths = SEARCH_TABLE_WIDTHS[:]
     header_rect = pygame.Rect(content.x + 24, table_top, sum(widths), 42)
