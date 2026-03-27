@@ -29,6 +29,7 @@ PLACEHOLDER = (224, 232, 243)
 DANGER = (180, 63, 63)
 SHADOW = (226, 233, 242)
 TABLE_LINE = (0, 0, 0)
+SEARCH_TABLE_WIDTHS = [324, 206, 116, 116, 116, 126]
 
 
 FONT_UI = "arial"
@@ -75,6 +76,33 @@ def draw_text(
         surface.blit(rendered, (x, y + height))
         height += rendered.get_height() + line_spacing
     return height - line_spacing if lines else 0
+
+
+def measure_text_height(
+    text: str,
+    font: pygame.font.Font,
+    max_width: Optional[int] = None,
+    line_spacing: int = 6,
+) -> int:
+    if max_width is None:
+        return font.get_height()
+
+    words = text.split()
+    if not words:
+        return 0
+
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        if font.size(trial)[0] <= max_width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+
+    return len(lines) * font.get_height() + max(0, len(lines) - 1) * line_spacing
 
 
 def dashed_rect(
@@ -361,6 +389,33 @@ def seed_jobs() -> List[JobPosting]:
                 "Detail-oriented and dependable.",
                 "Comfort interacting with participants in a lab environment.",
                 "Interest in kinesiology or human movement research.",
+            ],
+        ),
+        JobPosting(
+            title="MIE240 Teaching Assistant",
+            department="Engineering",
+            position_type="Part Time",
+            campus_location="U of T St. George",
+            hours_per_week="11-24",
+            schedule_type="Fixed Hours",
+            contract_type="Contract",
+            start_date="09/07/2026",
+            end_date="04/25/2027",
+            positions="6",
+            location_details="Myhal Centre",
+            salary_type="Per Hour",
+            wage="$50 / hour",
+            deadline="04/19/2026",
+            summary="Prepare tutorial materials, support student activites, and grade student submissions.",
+            responsibilities=[
+                "Prepare tutorial material and check classrooms before tutorials.",
+                "Support human factors learning",
+                "Grade and provide feedback for student submissions.",
+            ],
+            qualifications=[
+                "Detail-oriented and dependable.",
+                "Comfort interacting with students.",
+                "Interest in human factors engineering.",
             ],
         ),
     ]
@@ -717,15 +772,7 @@ def draw_login_page(surface: pygame.Surface, login_button: Button) -> None:
         line_spacing=10,
     )
 
-    outline = pygame.Rect(hero.right - 380, hero.y + 80, 260, 300)
-    pygame.draw.rect(surface, PANEL, outline, border_radius=18)
-    pygame.draw.rect(surface, BORDER, outline, 1, border_radius=18)
-    pygame.draw.rect(surface, ACCENT_LIGHT, pygame.Rect(outline.x + 28, outline.y + 28, 204, 50), border_radius=12)
-    draw_text(surface, "Student Access", make_font(22, bold=True), TEXT, outline.x + 28, outline.y + 92)
-    for idx in range(3):
-        pygame.draw.rect(surface, PLACEHOLDER, pygame.Rect(outline.x + 28, outline.y + 140 + idx * 42, 204, 18), border_radius=8)
-    pygame.draw.rect(surface, BLUE_TINT, pygame.Rect(outline.x + 28, outline.y + 270, 204, 8), border_radius=4)
-
+    
     login_button.draw(surface)
 
 
@@ -764,14 +811,57 @@ def draw_left_nav(surface: pygame.Surface, state: AppState) -> None:
         y += 46 if label == "Jobs & Recruitment" else 34
 
 
+def get_main_content_rect() -> pygame.Rect:
+    return pygame.Rect(310, 142, WIDTH - 390, HEIGHT - 220)
+
+
 def draw_shell(surface: pygame.Surface, state: AppState) -> pygame.Rect:
     draw_window_chrome(surface)
     draw_top_nav(surface, state)
     draw_left_nav(surface, state)
-    content = pygame.Rect(310, 142, WIDTH - 390, HEIGHT - 220)
+    content = get_main_content_rect()
     pygame.draw.rect(surface, PANEL, content)
     pygame.draw.rect(surface, BORDER, content, 1)
     return content
+
+
+def get_search_list_view_height(filter_panel_open: bool) -> int:
+    content = get_main_content_rect()
+    table_top = content.y + (404 if filter_panel_open else 170)
+    header_bottom = table_top + 42
+    return content.bottom - header_bottom - 28
+
+
+def get_search_row_height(job: JobPosting, widths: List[int]) -> int:
+    cells = [job.title, job.department, job.table_type, job.wage, job.deadline]
+    heights = [
+        measure_text_height(cell, make_font(16), width - 20, 4)
+        for cell, width in zip(cells, widths)
+    ]
+    return max(76, max(heights) + 28)
+
+
+def get_search_content_height(jobs: List[JobPosting], widths: List[int], view_height: int) -> int:
+    total = sum(get_search_row_height(job, widths) for job in jobs)
+    return max(total, view_height)
+
+
+def get_details_content_height(job: JobPosting, viewport_width: int) -> int:
+    row_h = 46
+    section_y = 320 + len(job.field_rows) * row_h + 40
+    y = section_y + 34
+    bullet_width = viewport_width - 24
+
+    for item in job.responsibilities:
+        item_height = measure_text_height(item, make_font(18), bullet_width, 6)
+        y += max(36, item_height + 10)
+
+    y += 44
+    for item in job.qualifications:
+        item_height = measure_text_height(item, make_font(18), bullet_width, 6)
+        y += max(36, item_height + 10)
+
+    return y + 22 + 46 + 24
 
 
 def draw_search_page(
@@ -826,24 +916,24 @@ def draw_search_page(
 
     table_top = content.y + (404 if state.filter_panel_open else 170)
     headers = ["Job Title", "Department", "Type", "Wage", "Deadline", "Action"]
-    widths = [324, 206, 116, 116, 116, 126]
+    widths = SEARCH_TABLE_WIDTHS[:]
     header_rect = pygame.Rect(content.x + 24, table_top, sum(widths), 42)
     pygame.draw.rect(surface, SOFT_PANEL, header_rect)
-    pygame.draw.rect(surface, BORDER, header_rect, 1)
+    pygame.draw.rect(surface, TABLE_LINE, header_rect, 1)
 
     x = header_rect.x
     for header, width in zip(headers, widths):
-        pygame.draw.line(surface, BORDER, (x, header_rect.y), (x, header_rect.bottom), 1)
+        pygame.draw.line(surface, TABLE_LINE, (x, header_rect.y), (x, header_rect.bottom), 1)
         surface.blit(make_font(16, bold=True).render(header, True, MUTED), (x + 12, header_rect.y + 11))
         x += width
-    pygame.draw.line(surface, BORDER, (header_rect.right, header_rect.y), (header_rect.right, header_rect.bottom), 1)
+    pygame.draw.line(surface, TABLE_LINE, (header_rect.right, header_rect.y), (header_rect.right, header_rect.bottom), 1)
 
     list_rect = pygame.Rect(header_rect.x, header_rect.bottom, header_rect.width, content.bottom - header_rect.bottom - 28)
     pygame.draw.rect(surface, PANEL, list_rect)
-    pygame.draw.rect(surface, BORDER, list_rect, 1)
+    pygame.draw.rect(surface, TABLE_LINE, list_rect, 1)
 
-    row_height = 76
-    content_height = max(len(jobs) * row_height, list_rect.height)
+    row_heights = [get_search_row_height(job, widths) for job in jobs]
+    content_height = max(sum(row_heights), list_rect.height)
     state.results_scroll.set_bounds(list_rect.height, content_height)
 
     clip_before = surface.get_clip()
@@ -852,8 +942,10 @@ def draw_search_page(
     result_buttons.clear()
     y = list_rect.y - state.results_scroll.offset
     for idx, job in enumerate(jobs):
+        row_height = row_heights[idx]
         row = pygame.Rect(list_rect.x, y, list_rect.width, row_height)
         pygame.draw.rect(surface, PANEL, row)
+        pygame.draw.line(surface, TABLE_LINE, (row.x, row.y), (row.right, row.y), 1)
         pygame.draw.line(surface, TABLE_LINE, (row.x, row.bottom), (row.right, row.bottom), 1)
 
         cells = [
@@ -866,11 +958,11 @@ def draw_search_page(
         cell_x = row.x
         for text, width in cells:
             draw_text(surface, text, make_font(16), TEXT, cell_x + 12, row.y + 14, max_width=width - 20, line_spacing=4)
-            pygame.draw.line(surface, BORDER, (cell_x, row.y), (cell_x, row.bottom), 1)
+            pygame.draw.line(surface, TABLE_LINE, (cell_x, row.y), (cell_x, row.bottom), 1)
             cell_x += width
 
-        pygame.draw.line(surface, BORDER, (cell_x, row.y), (cell_x, row.bottom), 1)
-        button_rect = pygame.Rect(cell_x + 14, row.y + 18, widths[-1] - 28, 40)
+        pygame.draw.line(surface, TABLE_LINE, (cell_x, row.y), (cell_x, row.bottom), 1)
+        button_rect = pygame.Rect(cell_x + 14, row.y + max(18, (row_height - 40) // 2), widths[-1] - 28, 40)
         btn = Button(
             button_rect,
             "Apply/View",
@@ -883,7 +975,7 @@ def draw_search_page(
         )
         btn.draw(surface)
         result_buttons.append(btn)
-        pygame.draw.line(surface, BORDER, (cell_x + widths[-1], row.y), (cell_x + widths[-1], row.bottom), 1)
+        pygame.draw.line(surface, TABLE_LINE, (cell_x + widths[-1], row.y), (cell_x + widths[-1], row.bottom), 1)
         y += row_height
 
     if not jobs:
@@ -939,7 +1031,7 @@ def draw_details_page(
         return
 
     viewport = pygame.Rect(content.x + 24, content.y + 22, content.width - 48, content.height - 44)
-    content_height = 1020
+    content_height = get_details_content_height(job, viewport.width)
     state.details_scroll.set_bounds(viewport.height, content_height)
 
     clip_before = surface.get_clip()
@@ -984,15 +1076,15 @@ def draw_details_page(
     y = section_y + 34
     for item in job.responsibilities:
         pygame.draw.circle(surface, ACCENT_DARK, (viewport.x + 9, y + 11), 4)
-        draw_text(surface, item, make_font(18), TEXT, viewport.x + 24, y, max_width=viewport.width - 24)
-        y += 36
+        item_height = draw_text(surface, item, make_font(18), TEXT, viewport.x + 24, y, max_width=viewport.width - 24)
+        y += max(36, item_height + 10)
 
     surface.blit(make_font(20, bold=True).render("Qualifications", True, TEXT), (viewport.x, y + 10))
     y += 44
     for item in job.qualifications:
         pygame.draw.circle(surface, ACCENT_DARK, (viewport.x + 9, y + 11), 4)
-        draw_text(surface, item, make_font(18), TEXT, viewport.x + 24, y, max_width=viewport.width - 24)
-        y += 36
+        item_height = draw_text(surface, item, make_font(18), TEXT, viewport.x + 24, y, max_width=viewport.width - 24)
+        y += max(36, item_height + 10)
 
     apply_bottom_button.rect = pygame.Rect(viewport.x, y + 22, viewport.width, 46)
     apply_bottom_button.draw(surface)
@@ -1252,14 +1344,18 @@ def main() -> None:
                     if state.filter_panel_open and Dropdown.OPEN_MENU is not None and Dropdown.OPEN_MENU.handle_event(event):
                         pass
                     else:
-                        state.results_scroll.update(-event.y * 48, 408 if state.filter_panel_open else 594, max(len(current_jobs) * 76, 408 if state.filter_panel_open else 594))
+                        view_height = get_search_list_view_height(state.filter_panel_open)
+                        content_height = get_search_content_height(current_jobs, SEARCH_TABLE_WIDTHS, view_height)
+                        state.results_scroll.update(-event.y * 48, view_height, content_height)
 
             elif state.screen == "details":
                 details_back_button.handle_event(event)
                 details_apply_top.handle_event(event)
                 details_apply_bottom.handle_event(event)
-                if event.type == pygame.MOUSEWHEEL:
-                    state.details_scroll.update(-event.y * 48, HEIGHT - 286, 1020)
+                if event.type == pygame.MOUSEWHEEL and state.selected_job is not None:
+                    viewport_height = get_main_content_rect().height - 44
+                    content_height = get_details_content_height(state.selected_job, get_main_content_rect().width - 48)
+                    state.details_scroll.update(-event.y * 48, viewport_height, content_height)
 
             elif state.screen == "apply":
                 apply_back_button.handle_event(event)
