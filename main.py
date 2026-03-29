@@ -1155,7 +1155,7 @@ def draw_apply_page(surface: pygame.Surface, state: AppState, back_button: Butto
     pygame.draw.rect(surface, BORDER, callout, 1, border_radius=10)
     draw_text(
         surface,
-        "Upload the required documents for this posting. Buttons are intentionally non-functional in this prototype so evaluators can focus on the application flow and page structure.",
+        "Upload the required documents for this posting.",
         make_font(19),
         TEXT,
         callout.x + 18,
